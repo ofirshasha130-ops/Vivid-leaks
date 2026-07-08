@@ -279,7 +279,7 @@ export async function closeTicket(channel, closer, reason = 'No reason provided'
         if (ticketCreator) {
           const dmEmbed = createEmbed({
             title: '🎫 Your Ticket Has Been Closed',
-            description: `Your ticket **${channel.name}** has been closed.\n\n**Reason:** ${reason}\n**Closed by:** ${closer.tag}\n**Closed at:** <t:${Math.floor(Date.now() / 1000)}:F>\n\nThank you for using our support system! If you have any further questions, feel free to create a new ticket.`,
+            description: `Your ticket **${channel.name}** has been closed.\n\n**Reason:** ${reason}\n**Closed by:** ${closer.tag}\n**Closed at:** <t:${Math.floor(Date.now() / 1000)}:F>\n\nThank y[...]
             color: '#e74c3c',
             footer: { text: `Ticket ID: ${ticketData.id}` }
           });
@@ -1079,8 +1079,9 @@ export async function renameTicket(channel, newName, renamer) {
       return { success: false, error: 'New name must be 100 characters or fewer.' };
     }
 
-    if (!/^[a-zA-Z0-9-]+$/.test(trimmedName)) {
-      return { success: false, error: 'Name may only contain letters, numbers, and hyphens.' };
+    // Fixed validation: Allow letters, numbers, hyphens, and spaces
+    if (!/^[a-zA-Z0-9\s-]+$/.test(trimmedName)) {
+      return { success: false, error: 'Name may only contain letters, numbers, hyphens, and spaces.' };
     }
 
     const currentName = channel.name;
