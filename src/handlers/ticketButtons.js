@@ -1,6 +1,6 @@
 import { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, AttachmentBuilder, MessageFlags } from 'discord.js';
 import { createEmbed, successEmbed } from '../utils/embeds.js';
-import { createTicket, closeTicket, claimTicket, updateTicketPriority } from '../services/ticket.js';
+import { createTicket, closeTicket, claimTicket, updateTicketPriority, renameTicket } from '../services/ticket.js';
 import { getGuildConfig } from '../services/guildConfig.js';
 import { logTicketEvent } from '../utils/ticketLogging.js';
 import { logger } from '../utils/logger.js';
@@ -609,6 +609,105 @@ const deleteTicketHandler = {
   }
 };
 
+const renameTicketHandler = {
+  name: 'ticket_rename',
+  async execute(interaction, client) {
+    try {
+      if (!(await ensureGuildContext(interaction))) return;
+
+      const permissionCheck = await checkTicketPermissionWithTimeout(
+        interaction,
+        client,
+        'rename tickets',
+        {},
+        2000
+      );
+
+      if (!permissionCheck.success) {
+        await replyPermissionCheckFailure(interaction, permissionCheck);
+        return;
+      }
+
+      const modal = new ModalBuilder()
+        .setCustomId('ticket_rename_modal')
+        .setTitle('Rename Ticket');
+
+      const nameInput = new TextInputBuilder()
+        .setCustomId('new_name')
+        .setLabel('New ticket name')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('e.g. billing-issue or feature-request')
+        .setRequired(true)
+        .setMaxLength(100);
+
+      const actionRow = new ActionRowBuilder().addComponents(nameInput);
+      modal.addComponents(actionRow);
+
+      await interaction.showModal(modal);
+    } catch (error) {
+      logger.error('Error opening rename ticket modal:', error);
+      if (!interaction.replied && !interaction.deferred) {
+        await replyUserError(interaction, { type: ErrorTypes.UNKNOWN, message: 'Could not open ticket rename form.' });
+      }
+    }
+  }
+};
+
+const renameTicketModalHandler = {
+  name: 'ticket_rename_modal',
+  async execute(interaction, client) {
+    try {
+      if (!(await ensureGuildContext(interaction))) return;
+
+      const permissionCheck = await checkTicketPermissionWithTimeout(
+        interaction,
+        client,
+        'rename tickets',
+        {},
+        2000
+      );
+
+      if (!permissionCheck.success) {
+        await replyPermissionCheckFailure(interaction, permissionCheck);
+        return;
+      }
+
+      const deferSuccess = await InteractionHelper.safeDefer(interaction, { flags: MessageFlags.Ephemeral });
+      if (!deferSuccess) return;
+
+      const newName = interaction.fields.getTextInputValue('new_name')?.trim();
+
+      if (!newName) {
+        await replyUserError(interaction, { type: ErrorTypes.VALIDATION, message: 'A new name is required.' });
+        return;
+      }
+
+      if (newName.length > 100) {
+        await replyUserError(interaction, { type: ErrorTypes.VALIDATION, message: 'The new name must be 100 characters or fewer.' });
+        return;
+      }
+
+      const result = await renameTicket(interaction.channel, newName, interaction.user);
+
+      if (result.success) {
+        await interaction.editReply({
+          embeds: [successEmbed('Ticket Renamed', `This ticket has been renamed to \`${result.newName}\`.`)],
+          flags: MessageFlags.Ephemeral
+        });
+      } else {
+        await replyUserError(interaction, { type: ErrorTypes.UNKNOWN, message: result.error || 'Failed to rename ticket.' });
+      }
+    } catch (error) {
+      logger.error('Error submitting rename ticket modal:', error);
+      if (!interaction.replied && !interaction.deferred) {
+        await replyUserError(interaction, { type: ErrorTypes.UNKNOWN, message: 'An error occurred while renaming the ticket.' });
+      } else if (interaction.deferred) {
+        await replyUserError(interaction, { type: ErrorTypes.UNKNOWN, message: 'An error occurred while renaming the ticket.' });
+      }
+    }
+  }
+};
+
 export default createTicketHandler;
 export { 
   createTicketModalHandler, 
@@ -619,5 +718,7 @@ export {
   pinTicketHandler,
   unclaimTicketHandler,
   reopenTicketHandler,
-  deleteTicketHandler 
+  deleteTicketHandler,
+  renameTicketHandler,
+  renameTicketModalHandler
 };
