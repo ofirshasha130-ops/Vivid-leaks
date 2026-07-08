@@ -33,6 +33,11 @@ function buildTicketControlRow({ claimedBy = null } = {}) {
       .setStyle(ButtonStyle.Secondary)
       .setEmoji('📌'),
     new ButtonBuilder()
+      .setCustomId('ticket_rename')
+      .setLabel('Rename')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji('✏️'),
+    new ButtonBuilder()
       .setCustomId('ticket_close')
       .setLabel('Close')
       .setStyle(ButtonStyle.Danger)
@@ -1055,6 +1060,88 @@ export async function unclaimTicket(channel, unclaimer) {
 
 async function getNextTicketNumber(guildId) {
   return await incrementTicketCounter(guildId);
+}
+
+export async function renameTicket(channel, newName, renamer) {
+  try {
+    const ticketData = await getTicketData(channel.guild.id, channel.id);
+    if (!ticketData) {
+      return { success: false, error: 'This is not a ticket channel' };
+    }
+
+    const trimmedName = newName.trim();
+
+    if (!trimmedName) {
+      return { success: false, error: 'New name cannot be empty.' };
+    }
+
+    if (trimmedName.length > 100) {
+      return { success: false, error: 'New name must be 100 characters or fewer.' };
+    }
+
+    if (!/^[a-zA-Z0-9-]+$/.test(trimmedName)) {
+      return { success: false, error: 'Name may only contain letters, numbers, and hyphens.' };
+    }
+
+    const currentName = channel.name;
+
+    // Detect and preserve any leading priority emoji prefix (e.g. "🔴 " or "📌 ")
+    const prefixMatch = currentName.match(/^([^\w\s-]+\s+)/u);
+    const prefix = prefixMatch ? prefixMatch[1] : '';
+
+    const finalName = `${prefix}${trimmedName}`;
+
+    const previousName = currentName;
+    await channel.setName(finalName);
+
+    const renameEmbed = createEmbed({
+      title: '✏️ Ticket Renamed',
+      description: `${renamer} renamed this ticket.\n\n**Before:** \`${previousName}\`\n**After:** \`${finalName}\``,
+      color: '#3498db'
+    });
+
+    await channel.send({ embeds: [renameEmbed] });
+
+    await logTicketEvent({
+      client: channel.client,
+      guildId: channel.guild.id,
+      event: {
+        type: 'rename',
+        ticketId: channel.id,
+        ticketNumber: ticketData.id,
+        userId: ticketData.userId,
+        executorId: renamer.id,
+        metadata: {
+          previousName,
+          newName: finalName,
+          renamedAt: new Date().toISOString()
+        }
+      }
+    });
+
+    return { success: true, ticketData, previousName, newName: finalName };
+
+  } catch (error) {
+    const typedError = ensureTypedServiceError(error, {
+      service: 'ticketService',
+      operation: 'renameTicket',
+      message: 'Ticket operation failed: renameTicket',
+      userMessage: 'Failed to rename ticket. Please try again in a moment.',
+      context: { guildId: channel?.guild?.id, channelId: channel?.id, renamerId: renamer?.id }
+    });
+    logger.error('Error renaming ticket:', {
+      guildId: channel?.guild?.id,
+      channelId: channel?.id,
+      userId: renamer?.id,
+      error: typedError.message,
+      errorCode: typedError.context?.errorCode
+    });
+    return {
+      success: false,
+      error: typedError.userMessage || typedError.message,
+      errorCode: typedError.context?.errorCode
+    };
+  }
 }
 
 export async function updateTicketPriority(channel, priority, updater) {
