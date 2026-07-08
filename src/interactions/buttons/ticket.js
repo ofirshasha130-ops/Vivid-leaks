@@ -7,7 +7,6 @@ import createTicketHandler, {
   reopenTicketHandler,
   deleteTicketHandler,
   renameTicketHandler,
-  renameTicketModalHandler,
 } from '../../handlers/ticketButtons.js';
 
 export default [
@@ -20,5 +19,4 @@ export default [
   reopenTicketHandler,
   deleteTicketHandler,
   renameTicketHandler,
-  renameTicketModalHandler,
 ];
